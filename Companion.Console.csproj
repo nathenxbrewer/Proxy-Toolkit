@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net7.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <UserSecretsId>0e7b54bc-dc7e-4982-9926-b375bb053445</UserSecretsId>
+        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Google.Apis.Drive.v2" Version="1.61.0.3120" />
+      <PackageReference Include="Magick.NET-Q16-AnyCPU" Version="13.4.0" />
+      <PackageReference Include="NStack.Core" Version="1.0.7" />
+      <PackageReference Include="PdfPig" Version="0.1.9-alpha-20231026-63096" />
+      <PackageReference Include="Selenium.Support" Version="4.10.0" />
+      <PackageReference Include="Selenium.WebDriver" Version="4.10.0" />
+      <PackageReference Include="Selenium.WebDriver.MSEdgeDriver" Version="114.0.1823.58" />
+      <PackageReference Include="Terminal.Gui" Version="1.15.0-pre.68" />
+    </ItemGroup>
+
+
+    <ItemGroup>
+      <Reference Include="ProxyFill.Domain">
+        <HintPath>..\ProxyFill\ProxyFill.Shared\bin\Release\netstandard2.1\ProxyFill.Domain.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+
+
+
+
+    <ItemGroup>
+      <None Remove="Profiles\CGATS21_CRPC7.icc" />
+      <EmbeddedResource Include="Profiles\CGATS21_CRPC7.icc">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+      <None Remove="Profiles\CGATS21_CRPC1.icc" />
+      <EmbeddedResource Include="Profiles\CGATS21_CRPC1.icc">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+    </ItemGroup>
+
+
+
+
+    <ItemGroup>
+      <ProjectReference Include="..\ProxyFill\ProxyFill.Shared\ProxyFill.Shared.csproj" />
+    </ItemGroup>
+
+    <Target Name="CopyRequiredNativeAssets" AfterTargets="_GenerateFunctionsPostBuild">
+        <ItemGroup>
+            <NativeAssetToCopy Include="$(OutDir)\Magick.Native-*.so" />
+        </ItemGroup>
+        <Copy SourceFiles="@(NativeAssetToCopy)" DestinationFolder="$(OutDir)\bin" />
+    </Target>
+
+</Project>
