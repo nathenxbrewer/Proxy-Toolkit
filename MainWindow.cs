@@ -12,6 +12,8 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using Companion.Console.Enum;
 using Companion.Console.Services;
+using Google.Apis.Drive.v2.Data;
+using HttpProgress;
 using ImageMagick;
 using Newtonsoft.Json;
 using OpenQA.Selenium.DevTools.V112.Debugger;
@@ -21,6 +23,7 @@ using Terminal.Gui;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Writer;
+using File = System.IO.File;
 
 namespace Companion.Console;
 
@@ -40,9 +43,10 @@ public partial class MainWindow
     private const double IMAGE_WIDTH_INCH = 2.75;
     private const double IMAGE_HEIGHT_INCH = 3.75;
 
-    private const string STEP_TEXT = "";
+    private const string STEP_TEXT = "Step:";
     private const string TASK_TEXT = "";
     private CancellationTokenSource cancellationTokenSource;
+    private Progress<ICopyProgress> downloadProgress;
 
 
     public MainWindow()
@@ -51,6 +55,54 @@ public partial class MainWindow
         btnGithub.Clicked += BtnGithubOnClicked;
         btnBuyCoffee.Clicked += BtnBuyCoffeeOnClicked;
         btnGeneratePDF.Clicked += () => Application.MainLoop.Invoke (BtnGeneratePDFOnClicked);
+        if (!File.Exists("Data/Images/Lorcana/timestamp.txt"))
+        {
+            //download the images from github
+            Application.MainLoop.Invoke (DownloadImagesFromGithub);
+        }
+    }
+
+    private async void DownloadImagesFromGithub()
+    {
+        //download this zip from Github
+        //https://github.com/nathenxbrewer/Proxy-Toolkit/raw/main/Data/Images/Lorcana/Lorcana.zip
+        //extract it to the Data/Images/Lorcana folder
+        SetStepText("Downloading Lorcana images...");
+        var url = "https://github.com/nathenxbrewer/Proxy-Toolkit/raw/main/Data/Images/Lorcana/Lorcana.zip";
+        var destinationPath = "Data/Images/Lorcana";
+        var zipFilePath = Path.Combine(destinationPath, "Lorcana.zip");
+
+        // Ensure the destination directory exists
+        if (!Directory.Exists(destinationPath))
+        {
+            Directory.CreateDirectory(destinationPath);
+        }
+
+        try
+        {
+            downloadProgress = new Progress<ICopyProgress>();
+            downloadProgress.ProgressChanged += (sender, args) => 
+                ReportProgress(args.BytesTransferred, args.ExpectedBytes);
+            var imageZip = await DownloadFileWithProgress(url, zipFilePath);
+            //write imageZip byte array to zipFilePath
+            File.WriteAllBytes(zipFilePath, imageZip);
+            
+            
+            SetProgress(0, 1);
+            // Extract the zip file
+            SetStepText("Extracting Lorcana images...");
+            System.IO.Compression.ZipFile.ExtractToDirectory(zipFilePath, destinationPath);
+            SetStepText("Lorcana images downloaded!");
+
+            // Optionally, delete the zip file after extraction
+            File.Delete(zipFilePath);
+        }
+        catch (Exception e)
+        {
+            
+        }
+
+        
     }
 
     private async void BtnGeneratePDFOnClicked()
@@ -362,6 +414,33 @@ public partial class MainWindow
         }
     }
 
+    private async Task<byte[]?> DownloadFileWithProgress(string url, string destinationPath)
+    {
+        try
+        {
+            using var client = new HttpClient();
+            using var downloadStream = new MemoryStream();
+            var result = await client.GetAsync(url, downloadStream, downloadProgress);
+            return result.IsSuccessStatusCode ? downloadStream.ToArray() : null;
+        }
+        catch (Exception ex)
+        {
+            return null;
+        }
+    }
+    private void ReportProgress(long bytesRead, long totalBytes)
+    {
+        SetProgress((int)bytesRead,(int)(totalBytes));
+        //SetTaskText($"Downloaded {progress:F2}%");
+    }
+    private void SetProgressText(string text)
+    {
+        Application.MainLoop.Invoke(() =>
+        {
+            progressBar.Text = text;
+            progressBar.SetNeedsDisplay();
+        });
+    }
     private void BtnBuyCoffeeOnClicked()
     {
         Process.Start(new ProcessStartInfo("https://www.buymeacoffee.com/nathenxbrewer") { UseShellExecute = true });
