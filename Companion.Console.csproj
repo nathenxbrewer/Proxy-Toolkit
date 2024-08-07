@@ -39,6 +39,8 @@
       <EmbeddedResource Include="Profiles\CGATS21_CRPC1.icc">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </EmbeddedResource>
+      <EmbeddedResource Remove="Data\**" />
+      <None Remove="Data\**" />
     </ItemGroup>
 
 
@@ -46,6 +48,13 @@
 
     <ItemGroup>
       <ProjectReference Include="..\ProxyFill\ProxyFill.Shared\ProxyFill.Shared.csproj" />
+    </ItemGroup>
+
+
+
+
+    <ItemGroup>
+      <Compile Remove="Data\**" />
     </ItemGroup>
 
     <Target Name="CopyRequiredNativeAssets" AfterTargets="_GenerateFunctionsPostBuild">
