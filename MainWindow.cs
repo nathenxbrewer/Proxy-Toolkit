@@ -9,9 +9,13 @@
 
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.RegularExpressions;
+using Companion.Console.Enum;
+using Companion.Console.Services;
 using ImageMagick;
 using Newtonsoft.Json;
 using OpenQA.Selenium.DevTools.V112.Debugger;
+using ProxyFill.Domain.Enum;
 using ProxyFill.Shared.Model;
 using Terminal.Gui;
 using UglyToad.PdfPig.Content;
@@ -25,6 +29,7 @@ public partial class MainWindow
     public string OrderPath { get; set; }
     public int TargetDPI { get; set; }
     public bool CompressImages { get; set; }
+    public Game CurrentGame { get; set; }
     public List<string> failedDownloads = new();
     public IEnumerable<ProxyCardDto> Cards { get; set; }
     public MemoryStream MainMemoryStream = new();
@@ -54,15 +59,105 @@ public partial class MainWindow
         OrderPath = txtFieldPath.Text.ToString();
         TargetDPI = GetTargetDPI(radioGroup.SelectedItem);
         CompressImages = TargetDPI > 0;
-        var listString = File.ReadAllText(OrderPath);
-        var order = JsonConvert.DeserializeObject<ProxyFillOrder>(listString);
-        Cards = order.Cards.Where(x => x.FrontImage != null);
+        //var listString = File.ReadAllText(OrderPath);
+        //var listString = File.ReadAllText(OrderPath);
+        SetStepText("Parsing deck list...");
+        Cards = await Task.Run(ParseDeckList, cancellationTokenSource.Token);
+        //var order = JsonConvert.DeserializeObject<ProxyFillOrder>(listString);
+        //Cards = order.Cards.Where(x => x.FrontImage != null);
         await Task.Run(DownloadImages, cancellationTokenSource.Token);
         await Task.Run(DownloadBacks, cancellationTokenSource.Token);
         await Task.Run(GeneratePdf, cancellationTokenSource.Token);
         SetStepText("Process complete!");
     }
-    
+
+    private async Task<List<ProxyCardDto>> ParseDeckList()
+    {
+        //check if cards are Pokemon or Lorcana
+        //Lorcana is in "3 Rafiki - Mystical Fighter" format
+        //Pokemon is in "1 Bulbasaur DET 1" format
+        var cards = new List<ProxyCardDto>();
+        var lines = File.ReadAllLines("/Users/nathenbrewer/Downloads/LorcanaDeck.txt");
+        var lorcanaPattern = new Regex(@"^\d+ [\w\s'-]+(?: - [\w\s'-]+)?(?: \([\w\s'-]+\))?$");        
+        var lorcanaMatches = lorcanaPattern.Match(lines[0]);
+
+        var pokemonPattern = new Regex(@"^\d+ (?:[\w\s]+) [A-Z]{3} \d+$");
+        var pokemonMatches = pokemonPattern.Match(lines[0]);
+        
+        CurrentGame = lorcanaMatches.Success ? Game.Lorcana : Game.Pokemon;
+        
+        switch (CurrentGame)
+        {
+            case Game.Lorcana:
+            {
+                using (var lorcastApiService = new LorcastApiService())
+                {
+                    var invalidCards = new List<string>();
+                    foreach (var line in lines)
+                    {
+                        var pattern = @"^(?<quantity>\d+)\s(?<name>[\w\s'!]+)(?:\s-\s(?<version>[\w\s'!]+))?(?:\s\((?<enchanted>enchanted)\))?$";
+                        var regex = new Regex(pattern);
+                        var match = regex.Match(line);
+
+                        if (!match.Success)
+                        {
+                            throw new ArgumentException("Line does not match the expected format.");
+                        }
+
+                        var quantity = int.Parse(match.Groups["quantity"].Value);
+                        var name = match.Groups["name"].Value.Trim();
+                        var version = match.Groups["version"].Value.Trim();
+                        var enchanted = match.Groups["enchanted"].Value.Trim();
+
+                        var hasVersion = !string.IsNullOrEmpty(version);
+                        var isEnchanted = !string.IsNullOrEmpty(enchanted);
+
+                        //use the Lorcast API to validate if this is a legit card
+                        //if enchanted, add that to the search
+                        IEnumerable<LorcastApiService.CardDto> matchingCards;
+                        if (hasVersion && isEnchanted)
+                        {
+                            matchingCards = await lorcastApiService.SearchCardsByNameAndVersionAsync(name, version, true);
+                        }
+                        else if(hasVersion)
+                        {
+                            matchingCards = await lorcastApiService.SearchCardsByNameAndVersionAsync(name, version);
+                        }
+                        else
+                        {
+                            matchingCards = await lorcastApiService.SearchCardsByNameAsync(name);
+                        }
+
+                        if (matchingCards == null || !matchingCards.Any() || matchingCards.Count() > 1)
+                        {
+                            invalidCards.Add(line);
+                            continue;
+                        }
+
+                        var matchingCard = matchingCards.First();
+                        var card = new ProxyCardDto
+                        {
+                            Quantity = quantity,
+                            Name = name,
+                            Version = version,
+                            Game = Game.Lorcana,
+                            Enchanted = isEnchanted
+                        };
+                        cards.Add(card);
+                    }
+
+                }
+                break;
+            }            
+            case Game.Pokemon:
+            {
+                break;
+            }
+        }
+
+        return cards;
+    }
+
     private int GetTargetDPI(int radioGroupSelectedItem)
     {
         switch (radioGroupSelectedItem)
