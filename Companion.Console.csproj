@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>net7.0</TargetFramework>
+        <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <UserSecretsId>0e7b54bc-dc7e-4982-9926-b375bb053445</UserSecretsId>
@@ -13,12 +13,12 @@
       <PackageReference Include="bloomtom.HttpProgress" Version="2.3.2" />
       <PackageReference Include="Google.Apis.Drive.v2" Version="1.61.0.3120" />
       <PackageReference Include="Magick.NET-Q16-AnyCPU" Version="13.4.0" />
-      <PackageReference Include="NStack.Core" Version="1.0.7" />
+      <PackageReference Include="NStack.Core" Version="1.1.1" />
       <PackageReference Include="PdfPig" Version="0.1.9-alpha-20231026-63096" />
       <PackageReference Include="Selenium.Support" Version="4.10.0" />
       <PackageReference Include="Selenium.WebDriver" Version="4.10.0" />
       <PackageReference Include="Selenium.WebDriver.MSEdgeDriver" Version="114.0.1823.58" />
-      <PackageReference Include="Terminal.Gui" Version="1.15.0-pre.68" />
+      <PackageReference Include="Terminal.Gui" Version="1.18.0-pre.35" />
     </ItemGroup>
 
 
