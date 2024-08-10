@@ -55,13 +55,54 @@ public partial class MainWindow
         btnGithub.Clicked += BtnGithubOnClicked;
         btnBuyCoffee.Clicked += BtnBuyCoffeeOnClicked;
         btnGeneratePDF.Clicked += () => Application.MainLoop.Invoke (BtnGeneratePDFOnClicked);
+        
+        Application.MainLoop.Invoke(InitializeAsync);
+    }
+
+    private async void InitializeAsync()
+    {
         if (!File.Exists("Data/Images/Lorcana/timestamp.txt"))
         {
             //download the images from github
             Application.MainLoop.Invoke (DownloadImagesFromGithub);
         }
+        else
+        {
+            //check if the images are older than the timestamp.txt by reading the contents and parsing as datetime
+            //if they are older, download the images from github
+            var timestamp = File.ReadAllText("Data/Images/Lorcana/timestamp.txt");
+            var lastDownloaded = DateTime.Parse(timestamp);
+            //compare to timestamp.txt on github
+            var githubTimestamp = await ReadTimestampFromGithubAsync();
+            if(githubTimestamp is null) return;
+            var diff = lastDownloaded - githubTimestamp.Value;
+            if (diff.Days > 1)
+            {
+                Application.MainLoop.Invoke (DownloadImagesFromGithub);
+            }
+            
+        }
+        
     }
 
+    public async Task<DateTime?> ReadTimestampFromGithubAsync()
+    {
+        var url = "https://github.com/nathenxbrewer/Proxy-Toolkit/raw/main/Data/Images/Lorcana/timestamp.txt";
+        using var client = new HttpClient();
+
+        try
+        {
+            var response = await client.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            return DateTime.Parse(content);
+        }
+        catch (Exception ex)
+        {
+            // Handle exceptions (e.g., log the error, rethrow, return a default value, etc.)
+            return null;
+        }
+    }
     private async void DownloadImagesFromGithub()
     {
         //download this zip from Github
