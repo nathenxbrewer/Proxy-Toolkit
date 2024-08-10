@@ -33,7 +33,7 @@ public partial class MainWindow
     public int TargetDPI { get; set; }
     public bool CompressImages { get; set; }
     public Game CurrentGame { get; set; }
-    public List<string> failedDownloads = new();
+    public List<ProxyCardDto> failedDownloads = new();
     public IEnumerable<ProxyCardDto> Cards { get; set; }
     public MemoryStream MainMemoryStream = new();
 
@@ -44,7 +44,7 @@ public partial class MainWindow
     private const double IMAGE_HEIGHT_INCH = 3.75;
 
     private const string STEP_TEXT = "Step:";
-    private const string TASK_TEXT = "";
+    private const string TASK_TEXT = "Task:";
     private CancellationTokenSource cancellationTokenSource;
     private Progress<ICopyProgress> downloadProgress;
 
@@ -117,10 +117,78 @@ public partial class MainWindow
         Cards = await Task.Run(ParseDeckList, cancellationTokenSource.Token);
         //var order = JsonConvert.DeserializeObject<ProxyFillOrder>(listString);
         //Cards = order.Cards.Where(x => x.FrontImage != null);
-        await Task.Run(DownloadImages, cancellationTokenSource.Token);
-        await Task.Run(DownloadBacks, cancellationTokenSource.Token);
+        if (CurrentGame is Game.Pokemon)
+        {
+            await Task.Run(DownloadImages, cancellationTokenSource.Token);
+            await Task.Run(DownloadBacks, cancellationTokenSource.Token);
+        }
+        else
+        {
+            await Task.Run(FindFrontImages, cancellationTokenSource.Token);
+        }
+
         await Task.Run(GeneratePdf, cancellationTokenSource.Token);
         SetStepText("Process complete!");
+        SetTaskText($"PDF saved to Output folder.");
+    }
+
+    private async Task FindFrontImages()
+    {
+        // Look through the filesystem in Data/Images/Lorcana for the images that match each Card object in Cards
+        // If the image is not found, add it to a list of failed downloads
+        var imageFiles = Directory.GetFiles("Data/Images/Lorcana", "*.jpg", SearchOption.AllDirectories);
+
+        foreach (var card in Cards)
+        {
+            var expectedImageName = $"{card.Name} - {card.Version}.jpg";
+
+            if (!string.IsNullOrEmpty(card.Version))
+            {
+                if (card.Enchanted)
+                {
+                    expectedImageName = $"{card.Name} - {card.Version} (enchanted).jpg";
+                }
+            }
+            else
+            {
+                expectedImageName = $"{card.Name}.jpg";
+            }
+
+
+            var imagePath = imageFiles.FirstOrDefault(file => Path.GetFileName(file).Equals(expectedImageName, StringComparison.OrdinalIgnoreCase));
+            if (imagePath == null)
+            {
+                failedDownloads.Add(card);
+            }
+            else
+            {
+                card.FrontImage = imagePath;
+                card.BackImage = Path.GetFullPath("Data/Images/Lorcana/Back/lorcana.jpg");
+            }
+
+
+        }
+        
+        //remove failedDownloads from Cards
+        Cards = Cards.Where(x => !failedDownloads.Select(x=>x.CardId).Contains(x.CardId));
+
+        if (failedDownloads.Any())
+        {
+            
+        }
+    }
+    
+    private async Task<int> ShowMessageBoxAsync(string title, string message, string[] buttons)
+    {
+        var tcs = new TaskCompletionSource<int>();
+
+        Application.MainLoop.Invoke(() =>
+        {
+            var response = MessageBox.Query(title, message, "Yes", "No");
+            tcs.SetResult(response);
+        });
+
+        return await tcs.Task;
     }
 
     private async Task<List<ProxyCardDto>> ParseDeckList()
@@ -129,7 +197,7 @@ public partial class MainWindow
         //Lorcana is in "3 Rafiki - Mystical Fighter" format
         //Pokemon is in "1 Bulbasaur DET 1" format
         var cards = new List<ProxyCardDto>();
-        var lines = File.ReadAllLines("/Users/nathenbrewer/Downloads/LorcanaDeck.txt");
+        var lines = File.ReadAllLines(OrderPath);
         var lorcanaPattern = new Regex(@"^\d+ [\w\s'-]+(?: - [\w\s'-]+)?(?: \([\w\s'-]+\))?$");        
         var lorcanaMatches = lorcanaPattern.Match(lines[0]);
 
@@ -193,7 +261,10 @@ public partial class MainWindow
                             Name = name,
                             Version = version,
                             Game = Game.Lorcana,
-                            Enchanted = isEnchanted
+                            Enchanted = isEnchanted,
+                            SetCode = matchingCard.Set.Code,
+                            Type = matchingCard.Type,
+                            CardId = matchingCard.Id,
                         };
                         cards.Add(card);
                     }
@@ -259,7 +330,7 @@ public partial class MainWindow
             var downloadLink = group.Key;
             if (!await DownloadDriveFile(downloadLink, path))
                 SetTaskText($"Failed to download {filename}...");
-                failedDownloads.Add(filename);
+                failedDownloads.Add(card);
 
             x++;
             SetProgress(x,imageCount);
@@ -291,7 +362,7 @@ public partial class MainWindow
             }
 
             var downloadLink = group.Key;
-            if (!await DownloadDriveFile(downloadLink, path)) failedDownloads.Add(filename);
+            if (!await DownloadDriveFile(downloadLink, path)) failedDownloads.Add(card);
 
             SetProgress(x, imageCount);
         }
@@ -336,24 +407,62 @@ public partial class MainWindow
                 for (int j = 0; j < card.Quantity; j++)
                 {
                     //back
-                    var backFileName = GetGoogleDriveId(card.BackImage) + ".png";
+                    var backFileName = "";
+                    var backFilePath = "";
+
+                    if (CurrentGame is Game.Lorcana)
+                    {
+                        backFileName = Path.GetFileName(card.BackImage);
+                        backFilePath = card.BackImage;
+                    }
+                    else
+                    {
+                        backFileName = GetGoogleDriveId(card.BackImage) + ".png";
+                        backFilePath = Path.Combine("Backs", backFileName);
+                    }
+                    
                     var backPage = builder.AddPage(IMAGE_WIDTH_POINT, IMAGE_HEIGHT_POINT); //300 dpi
-                    var backFilePath = Path.Combine("Backs", backFileName);
-                    SetTaskText($"Adding {backFileName} to PDF...");
-                    var compressedBackImage = ProcessImageForPrinting(backFilePath, 25, 50);
-                    backPage.AddPng(compressedBackImage, placement);
+                    //SetTaskText($"Adding {backFileName} to PDF...");
+                    var compressedBackImage = ProcessImageForPrinting(backFilePath);
+                    var fileExtension = Path.GetExtension(backFilePath).ToLower();
+                    if (fileExtension == ".jpg" || fileExtension == ".jpeg")
+                    {
+                        backPage.AddJpeg(compressedBackImage, placement);
+                    }
+                    else
+                    {
+                        backPage.AddPng(compressedBackImage, placement);
+                    }
 
                     //front
-                    var filename = $"{card.Name} {card.SetCode} {card.Number} ({GetGoogleDriveId(card.FrontImage)}).png";
+                    var filename = "";
+                    var filePath = "";
+                    if (CurrentGame is Game.Lorcana)
+                    {
+                        filename = Path.GetFileName(card.FrontImage);
+                        filePath = card.FrontImage;
+                    }
+                    else
+                    {
+                        filename = $"{card.Name} {card.SetCode} {card.Number} ({GetGoogleDriveId(card.FrontImage)}).png";
+                        filePath = Path.Combine("Images", filename);
+
+                    }
                     var page = builder.AddPage(IMAGE_WIDTH_POINT, IMAGE_HEIGHT_POINT); //300 dpi
-                    var filePath = Path.Combine("Images", filename);
 
                     using var stream = new MemoryStream();
 
-                    SetTaskText($"Adding {card.Name} {card.SetCode} {card.Number} to PDF...");
-                    var compressedImage = ProcessImageForPrinting(filePath, 25, 75);
+                    SetTaskText($"Adding {Path.GetFileName(filePath)} to PDF...");
+                    var compressedImage = ProcessImageForPrinting(filePath);
                     SetProgress(i, Cards.Sum(x=>x.Quantity));
-                    page.AddPng(compressedImage, placement);
+                    if (fileExtension == ".jpg" || fileExtension == ".jpeg")
+                    {
+                        page.AddJpeg(compressedImage, placement);
+                    }
+                    else
+                    {
+                        page.AddPng(compressedImage, placement);
+                    }                    
                     i++;
                 }
             }
@@ -366,7 +475,8 @@ public partial class MainWindow
         var deckFileName = Path.GetFileNameWithoutExtension(OrderPath);
         if (!Directory.Exists("Output")) Directory.CreateDirectory("Output");
 
-        var pdfFilePath = Path.Combine("Output", $"{deckFileName} ({TargetDPI} dpi).pdf");
+        var name = string.IsNullOrWhiteSpace(deckFileName) ? $"{CurrentGame} Deck - {DateTime.Now:MM-dd-yyyy}" : deckFileName;
+        var pdfFilePath = Path.Combine("Output", $"{name} ({TargetDPI} dpi).pdf");
         SetTaskText($"Exporting PDF to {pdfFilePath}");
         File.WriteAllBytes(pdfFilePath, documentBytes);
         SetStepText("PDF export complete!");
@@ -380,7 +490,7 @@ public partial class MainWindow
         return driveURL.Replace(@"https://drive.google.com/uc?export=download&id=", "");
     }
 
-    private MemoryStream ProcessImageForPrinting(string filePath, int quality, int sizePercent)
+    private MemoryStream ProcessImageForPrinting(string filePath)
     {
         var filename = Path.GetFileName(filePath);
         //SetTaskText("Checking if image needs compressed...");

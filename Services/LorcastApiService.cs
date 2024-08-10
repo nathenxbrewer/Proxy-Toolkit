@@ -72,6 +72,8 @@ public class LorcastApiService : IDisposable
         public string Id { get; set; }
         public string Name { get; set; }
         public string Version { get; set; }
+        public SetDto Set { get; set; }
+        public string[] Type { get; set; }
         // Add other properties as needed
     }
     

@@ -187,7 +187,7 @@ namespace Companion.Console {
             this.progressBar.BidirectionalMarquee = true;
             this.progressBar.ProgressBarStyle = Terminal.Gui.ProgressBarStyle.MarqueeContinuous;
             this.progressBar.ProgressBarFormat = Terminal.Gui.ProgressBarFormat.FramedPlusPercentage;
-            this.progressBar.SegmentCharacter = '█';
+            this.progressBar.SegmentCharacter = new Rune('█');
             this.Add(this.progressBar);
             this.btnBuyCoffee.Width = 16;
             this.btnBuyCoffee.Height = 1;
