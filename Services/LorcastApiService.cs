@@ -36,15 +36,9 @@ public class LorcastApiService : IDisposable
         return searchResult.results;
     }
     
-    public async Task<IEnumerable<CardDto>?> SearchCardsByNameAndVersionAsync(string name, string version)
-    {
-        var query = $"{name} version:{version}";
-        return await SearchCardsAsync(query);
-    }
-    
     public async Task<IEnumerable<CardDto>?> SearchCardsByNameAndVersionAsync(string name, string version, bool enchanted)
     {
-        var query = $"{name} version:{version}+rarity:enchanted";
+        var query = enchanted ? $"{name} version:{version}+rarity:enchanted" : $"{name} version:{version}";
         return await SearchCardsAsync(query);
     }
     public async Task<IEnumerable<CardDto>?> SearchCardsByNameAsync(string name)
