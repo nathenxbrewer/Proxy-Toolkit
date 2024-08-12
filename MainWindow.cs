@@ -64,6 +64,7 @@ public partial class MainWindow
         if (!File.Exists("Data/Images/Lorcana/timestamp.txt"))
         {
             //download the images from github
+            
             Application.MainLoop.Invoke (DownloadImagesFromGithub);
         }
         else
@@ -75,7 +76,7 @@ public partial class MainWindow
             //compare to timestamp.txt on github
             var githubTimestamp = await ReadTimestampFromGithubAsync();
             if(githubTimestamp is null) return;
-            var diff = lastDownloaded - githubTimestamp.Value;
+            var diff = githubTimestamp.Value - lastDownloaded;
             if (diff.Days > 1)
             {
                 Application.MainLoop.Invoke (DownloadImagesFromGithub);
@@ -87,7 +88,7 @@ public partial class MainWindow
 
     public async Task<DateTime?> ReadTimestampFromGithubAsync()
     {
-        var url = "https://github.com/nathenxbrewer/Proxy-Toolkit/raw/main/Data/Images/Lorcana/timestamp.txt";
+        var url = "https://raw.githubusercontent.com/nathenxbrewer/Proxy-Toolkit/main/Data/Images/Lorcana/timestamp.txt";
         using var client = new HttpClient();
 
         try
@@ -117,6 +118,11 @@ public partial class MainWindow
         if (!Directory.Exists(destinationPath))
         {
             Directory.CreateDirectory(destinationPath);
+        }
+        else
+        {
+            //delete the folder and all of the files within
+            Directory.Delete(destinationPath, true);
         }
 
         try
@@ -256,13 +262,18 @@ public partial class MainWindow
                     var invalidCards = new List<string>();
                     foreach (var line in lines)
                     {
-                        var pattern = @"^(?<quantity>\d+)\s(?<name>[\w\s'!]+)(?:\s-\s(?<version>[\w\s'!]+))?(?:\s\((?<enchanted>enchanted)\))?$";
-                        var regex = new Regex(pattern);
+                        var regex = new Regex(@"^(?<quantity>\d+)\s(?<name>[\w\s'!]+)(?:\s-\s(?<version>[\w\s'!]+))?(?:\s\((?<enchanted>enchanted)\))?$");
                         var match = regex.Match(line);
 
                         if (!match.Success)
                         {
-                            throw new ArgumentException("Line does not match the expected format.");
+                            //check if version has hyphen
+                            regex = new Regex(@"^(?<quantity>\d+)\s(?<name>[\w\s'-]+)\s-\s(?<version>[\w\s'-]+)(?:\s\((?<enchanted>enchanted)\))?$");
+                            match = regex.Match(line);
+                            if (!match.Success)
+                            {
+                                throw new ArgumentException("Line does not match the expected format.");
+                            }
                         }
 
                         var quantity = int.Parse(match.Groups["quantity"].Value);
@@ -276,13 +287,9 @@ public partial class MainWindow
                         //use the Lorcast API to validate if this is a legit card
                         //if enchanted, add that to the search
                         IEnumerable<LorcastApiService.CardDto> matchingCards;
-                        if (hasVersion && isEnchanted)
+                        if (hasVersion)
                         {
-                            matchingCards = await lorcastApiService.SearchCardsByNameAndVersionAsync(name, version, true);
-                        }
-                        else if(hasVersion)
-                        {
-                            matchingCards = await lorcastApiService.SearchCardsByNameAndVersionAsync(name, version);
+                            matchingCards = await lorcastApiService.SearchCardsByNameAndVersionAsync(name, version, isEnchanted);
                         }
                         else
                         {
