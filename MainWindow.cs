@@ -246,12 +246,26 @@ public partial class MainWindow
         var cards = new List<ProxyCardDto>();
         var lines = File.ReadAllLines(OrderPath);
         var lorcanaPattern = new Regex(@"^\d+ [\w\s'-]+(?: - [\w\s'-]+)?(?: \([\w\s'-]+\))?$");        
-        var lorcanaMatches = lorcanaPattern.Match(lines[0]);
-
         var pokemonPattern = new Regex(@"^\d+ (?:[\w\s]+) [A-Z]{3} \d+$");
-        var pokemonMatches = pokemonPattern.Match(lines[0]);
+
+        //go through each line until lorcanaPattern matches or pokemonPattern matches
+        var gameMatched = false;
+        foreach (var line in lines)
+        {
+            if (lorcanaPattern.IsMatch(line))
+            {
+                CurrentGame = Game.Lorcana;
+                break;
+            }
+            if (pokemonPattern.IsMatch(line))
+            {
+                CurrentGame = Game.Pokemon;
+                break;
+            }
+            // Handle invalid line format if needed
+        }
         
-        CurrentGame = lorcanaMatches.Success ? Game.Lorcana : Game.Pokemon;
+       // CurrentGame = lorcanaMatches.Success ? Game.Lorcana : Game.Pokemon;
         
         switch (CurrentGame)
         {
